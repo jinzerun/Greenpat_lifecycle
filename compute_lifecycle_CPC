@@ -9,7 +9,7 @@ import math
 
 #%%extract green patent from CPC classification
 
-#%% get_green_cpc_classification
+#%%get_green_cpc_classification
 #4digit指的是CPC分类号中前四位，第一位是字母，第2、3位是数字，第4位是字母
 Green_CPC_class_4digit = ['C02F', 'E03F', 'B65F', 'B09B', 'B09C']
 #6digit指的是CPC分类号中分号前面的所有（有些是5位，有些是6位）
@@ -24,7 +24,9 @@ Green_CPC_class_6digit = ['F02M39', 'F02M41', 'F02M43', 'F02M45', 'F02M47', 'F02
                           'Y02B20', 'Y02B30', 'Y02B40', 'Y02B50', 'Y02B60', 'Y02B70', 'Y02B80', 'Y02B90', 'Y02W10', 'Y02W30', 
                           'Y02W90', 'Y02P10', 'Y02P20', 'Y02P30', 'Y02P40', 'Y02P60', 'Y02P70', 'Y02P80', 'Y02P90']
 #8digit指的是CPC分类号中全部位数
-#list最后有部分出现了and，表示需要同时出现and前后的两个分类号才能算作绿色专利，这部分到时候每个要单独查一下（因为肯定没法匹配）
+#list最后有部分出现了and，表示需要同时出现and前后的两个分类号才能算作绿色专利，这部分到时候每个要单独查一下
+#对于出现了and的分类号（实际上只有G01M3/08、G01M3/14，G01M3/18，G01M3/22，G01M3/28），对其进行special处理（相当于新提出一个special的list）,后面也单独处理（处理思路在83-85行）
+
 Green_CPC_class_8digit = ['B01D53/34', 'B01D53/343', 'B01D53/346', 'B01D53/38', 'B01D53/40', 'B01D53/42', 'B01D53/44', 
                           'B01D53/46', 'B01D53/48', 'B01D53/485', 'B01D53/50', 'B01D53/501', 'B01D53/502', 'B01D53/504', 
                           'B01D53/505', 'B01D53/505', 'B01D53/507', 'B01D53/508', 'B01D53/52', 'B01D53/523', 'B01D53/526', 
@@ -54,11 +56,13 @@ Green_CPC_class_8digit = ['B01D53/34', 'B01D53/343', 'B01D53/346', 'B01D53/38', 
                           'H01M10/54', 'C10G1/10', 'G08B21/12', 'G08B21/14', 'F16K21/06', 'F16K21/08', 'F16K21/10', 'F16K21/12', 
                           'F16L55/07', 'E03C1/084', 'E03D3/12', 'E03D1/14', 'A47K11/12', 'A47K11/02', 'E03D13/007', 'E03D5/016', 
                           'E03B1/041', 'Y02B40/46', 'Y02B40/56', 'A01G25/02', 'A01G25/06', 'A01G25/16', 'C12N15/8273', 
-                          'F17D5/02 and E03', 'F16L55/16 and E03', 'G01M3/08 and E03', 'G01M3/14 and E03', 'G01M3/18 and E03', 
-                          'G01M3/22 and E03', 'G01M3/28 and E03', 'E03B3/06', 'E03B3/08', 'E03B3/10', 'E03B3/11', 'E03B3/12', 
+                          'F17D5/02', 'F16L55/16', 'E03B3/06', 'E03B3/08', 'E03B3/10', 'E03B3/11', 'E03B3/12', 
                           'E03B3/14', 'E03B3/15', 'E03B3/16', 'E03B3/18', 'E03B3/20', 'E03B3/24', 'E03B3/26', 'E03B3/04', 
                           'E03B3/28', 'E03B3/30', 'E03B3/32', 'E03B3/34', 'E03B3/36', 'E03B3/38', 'E03B3/02', 'E03B3/03', 
                           'E03B3/00', 'E03B3/40']
+
+Green_CPC_class_special_1 = ['G01M3/08','G01M3/14','G01M3/18','G01M3/22','G01M3/28']
+Green_CPC_class_special_2 = ['E03']
 
 #%%combine_dataframe_to_excel                  
 gpatID=pd.concat([pd.DataFrame({'4digit':Green_CPC_class_4digit}),pd.DataFrame({'6digit':Green_CPC_class_6digit}),pd.DataFrame({'8digit':Green_CPC_class_8digit})],axis=1)
@@ -69,19 +73,42 @@ gpatID.to_excel(r'C:\Users\dell\Desktop\CPC_greenpat_id.xlsx',index=False)
 CPC_classes = pd.read_csv(r'C:\Users\dell\Desktop\21挑战杯\202001_CPC_Classes.txt', sep='|')
 CPC_classes['CPC_Class'].replace(' ','')
 
+CPC_classes['CPC_Class_3dig'] = CPC_classes['CPC_Class'].apply(lambda x:x[0:3]).tolist()
 CPC_classes['CPC_Class_4dig'] = CPC_classes['CPC_Class'].apply(lambda x:x[0:4]).tolist()
 CPC_classes['CPC_Class_6dig'] = CPC_classes['CPC_Class'].apply(lambda x:x[0:re.search('\/',x).start()]).tolist()
 #取出“/”前面的所有字符可以参考上面的这个语句 
 
-CPC_classes_green = CPC_classes[(CPC_classes['CPC_Class_4dig'].isin(Green_CPC_class_4digit)) | (CPC_classes['CPC_Class_6dig'].isin(Green_CPC_class_6digit)) |(CPC_classes['CPC_Class'].isin(Green_CPC_class_8digit))  ]
-#这条语句应该就是用三个isin来把三个不同位数的CPC绿色专利匹配起来
+CPC_classes_green_1 = CPC_classes[(CPC_classes['CPC_Class_4dig'].isin(Green_CPC_class_4digit)) | (CPC_classes['CPC_Class_6dig'].isin(Green_CPC_class_6digit)) |(CPC_classes['CPC_Class'].isin(Green_CPC_class_8digit))  ]
 
-#不太明白下面的3个count的作用是什么？单纯是为了计数嘛
+#对于包含and的处理是这样的，这些“特殊”的专利，如果把其所对应的所有专利号放在同一个单元格内，并用逗号空格分开，那么这个单元格的字符串必定同时包含前面要求的8位和E03
+#因此，先把CPC_classes分类号按照id进行groupby，并对同一个id的专利的CPC分类号合并到同一个单元格内
+#然后判断这个单元格是否同时包含，然后找出并集，形成CPC_classes_special
+
+def ab(DF):
+    return ', '.join(DF.values)
+CPC_classes['CPC_Class'].astype(str)
+CPC_classes_merge =  CPC_classes.groupby(['appln_id'])['CPC_Class'].apply(ab).reset_index()
+CPC_classes_merge.rename({'CPC_Class':'CPC_Class_agglo'},axis=1,inplace=True)
+
+CPC_classes_special = CPC_classes_merge[(CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/08|E03',case=False) |
+                                   (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/14|E03',case=False) |
+                                    (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/18|E03',case=False) |
+                                     (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/22|E03',case=False) |
+                                      (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/28|E03',case=False)]
+
+CPC_classes_special = CPC_classes_special['CPC_Class_agglo'].str.split(', ', expand=True).stack().reset_index(level=0).set_index('level_0').rename(columns={0:'CPC_Class'}).join(df.drop('CPC_Class', axis=1))
+
+#把CPC_classes_special和之前正常提取的CPC_classes_green_1合并，得到所有的greenCPC
+CPC_classes_green = pd.concat([CPC_classes_green_1,CPC_classes_special],axis=0)
+
+                                       
+
 count4=0
 for i in range(0, CPC_classes.iloc[;,0].size):
     if CPC_classes.iloc[i,'CPC_Class_4dig'] in Green_CPC_class_4digit:
         count4=count4+1;
 print(count4)
+
 
 count6=0
 for i in range(0, CPC_classes.iloc[;,0].size):
