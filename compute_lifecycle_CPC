@@ -1,0 +1,123 @@
+import pandas as pd;
+import xlrd
+import numpy as np;
+import csv;
+import openpyxl;
+from openpyxl.workbook import Workbook
+from tqdm import tqdm
+import math
+
+#%%extract green patent from CPC classification
+
+#%%get_green_cpc_classification
+#4digit指的是CPC分类号中前四位，第一位是字母，第2、3位是数字，第4位是字母
+Green_CPC_class_4digit = ['C02F', 'E03F', 'B65F', 'B09B', 'B09C']
+#6digit指的是CPC分类号中分号前面的所有（有些是5位，有些是6位）
+Green_CPC_class_6digit = ['F02M39', 'F02M41', 'F02M43', 'F02M45', 'F02M47', 'F02M49', 'F02M51', 'F02M53', 'F02M55', 'F02M57', 
+                          'F02M59', 'F02M61', 'F02M63', 'F02M65', 'F02M67', 'F02M69', 'F02M71', 'F23J15', 'F23B80', 'F23C9', 
+                          'F23C10', 'F02D41', 'F02D43', 'F02D45', 'F02M23', 'F02M25', 'F02M27', 'F02P5', 'B01D46', 'B01D47', 
+                          'B01D49', 'B01D50', 'B01D51', 'B03C3', 'F01N3', 'F01N5', 'F01N7', 'F01N13', 'F01N9', 'F01N11', 
+                          'B63J4', 'C05F7', 'E01H15', 'B22F8', 'B29B17', 'B62D67', 'B65H73', 'C08J11', 'C10M175', 'C22B7', 
+                          'D01G11', 'C05F1', 'C05F5', 'C05F7', 'C05F9', 'C05F17', 'F23G5', 'F23G7', 'A61L11', 'F01N11', 
+                          'F01D11', 'E03B322', 'E03B5', 'E03B9', 'E03B11', 'Y02E10', 'Y02E50', 'Y02E20', 'Y02E30', 'Y02E40', 
+                          'Y02E60', 'Y02E70', 'Y02C10', 'Y02C20', 'Y02T10', 'Y02T30', 'Y02T50', 'Y02T70', 'Y02T90', 'Y02B10', 
+                          'Y02B20', 'Y02B30', 'Y02B40', 'Y02B50', 'Y02B60', 'Y02B70', 'Y02B80', 'Y02B90', 'Y02W10', 'Y02W30', 
+                          'Y02W90', 'Y02P10', 'Y02P20', 'Y02P30', 'Y02P40', 'Y02P60', 'Y02P70', 'Y02P80', 'Y02P90']
+#8digit指的是CPC分类号中全部位数
+#list最后有部分出现了and，表示需要同时出现and前后的两个分类号才能算作绿色专利，这部分到时候每个要单独查一下
+#对于出现了and的分类号（实际上只有G01M3/08、G01M3/14，G01M3/18，G01M3/22，G01M3/28），对其进行special处理（相当于新提出一个special的list）,后面也单独处理（处理思路在83-85行）
+
+Green_CPC_class_8digit = ['B01D53/34', 'B01D53/343', 'B01D53/346', 'B01D53/38', 'B01D53/40', 'B01D53/42', 'B01D53/44', 
+                          'B01D53/46', 'B01D53/48', 'B01D53/485', 'B01D53/50', 'B01D53/501', 'B01D53/502', 'B01D53/504', 
+                          'B01D53/505', 'B01D53/505', 'B01D53/507', 'B01D53/508', 'B01D53/52', 'B01D53/523', 'B01D53/526', 
+                          'B01D53/54', 'B01D53/56', 'B01D53/565', 'B01D53/58', 'B01D53/60', 'B01D53/62', 'B01D53/64', 
+                          'B01D53/66', 'B01D53/68', 'B01D53/685', 'B01D53/70', 'B01D53/72', 'B01J23/38', 'B01J23/40', 
+                          'B01J23/42', 'B01J23/44', 'B01J23/46', 'B01J23/462', 'B01J23/464', 'B01J23/466', 'B01J23/468', 
+                          'F01M13/02', 'F01M13/021', 'F01M13/022', 'F01M13/023', 'F01M13/025', 'F01M2013/026', 'F01M2013/027', 
+                          'F01M13/028', 'F01M13/04', 'F01M13/0405', 'F01M2013/0411', 'F01M13/0416', 'F01M2013/0422', 
+                          'F01M2013/0427', 'F01M2013/0433', 'F01M2013/0438', 'F01M2013/0444', 'F01M2013/045', 'F01M2013/0455', 
+                          'F01M2013/0461', 'F01M2013/0466', 'F01M2013/0472', 'F01M2013/0477', 'F01M2013/0483', 'F01M2013/0488', 
+                          'F01M2013/0494', 'F02B47/08', 'F02B47/10', 'F02D21/06', 'F02D21/08', 'F02D2021/083', 'F02D2021/086', 
+                          'F02D21/10', 'F02M3/02', 'F02M3/04', 'F02M3/041', 'F02M3/042', 'F02M3/043', 'F02M3/045', 'F02M3/05', 
+                          'F02M3/055', 'F02M31/02', 'F02M31/04', 'F02M31/042', 'F02M31/045', 'F02M31/047', 'F02M31/06', 
+                          'F02M31/062', 'F02M31/064', 'F02M31/066', 'F02M31/068', 'F02M31/07', 'F02M31/08', 'F02M31/0805', 
+                          'F02M31/082', 'F02M31/0825', 'F02M31/083', 'F02M31/087', 'F02M31/093', 'F02M31/10', 'F02M31/102', 
+                          'F02M31/105', 'F02M31/107', 'F02M31/12', 'F02M31/125', 'F02M31/13', 'F02M31/135', 'F02M31/14', 
+                          'F02M31/145', 'F02M31/16', 'F02M31/163', 'F02M31/166', 'F02M31/18', 'F02M31/183', 'F02M31/186', 
+                          'F23G7/06', 'F27B1/18', 'C21B7/22', 'C21C5/38', 'B01D53/92', 'B01D53/94', 'B01D53/96', 'F02M25/07', 
+                          'G01M15/10', 'F02B47/06', 'C10L10/02', 'C10L10/06', 'E02B15/04', 'E02B15/041', 'E02B15/042', 
+                          'E02B15/043', 'E02B15/045', 'E02B15/046', 'E02B15/047', 'E02B15/048', 'E02B15/06', 'E02B15/08', 
+                          'E02B15/0807', 'E02B15/0814', 'E02B15/0821', 'E02B15/0828', 'E02B15/0835', 'E02B15/0842', 'E02B15/085', 
+                          'E02B15/0857', 'E02B15/0864', 'E02B15/0871', 'E02B15/0878', 'E02B15/0885', 'E02B15/0892', 'E02B15/10', 
+                          'E02B15/101', 'E02B15/102', 'E02B15/103', 'E02B15/104', 'E02B15/105', 'E02B15/106', 'E02B15/107', 
+                          'E02B15/108', 'C09K3/32', 'E03C1/12', 'B63B35/32', 'C09K3/32', 'A43B1/12', 'A43B21/14', 'B03B9/06', 
+                          'B29B7/66', 'B30B9/32', 'B65D65/46', 'C03B1/02', 'C03C6/02', 'C03C6/08', 'C04B11/26', 'C04B33/132', 
+                          'C09K11/01', 'C22B25/06', 'D21B1/32', 'D21C5/02', 'D21H17/01', 'H01B15/00', 'H01J9/52', 'H01M6/52', 
+                          'H01M10/54', 'C10G1/10', 'G08B21/12', 'G08B21/14', 'F16K21/06', 'F16K21/08', 'F16K21/10', 'F16K21/12', 
+                          'F16L55/07', 'E03C1/084', 'E03D3/12', 'E03D1/14', 'A47K11/12', 'A47K11/02', 'E03D13/007', 'E03D5/016', 
+                          'E03B1/041', 'Y02B40/46', 'Y02B40/56', 'A01G25/02', 'A01G25/06', 'A01G25/16', 'C12N15/8273', 
+                          'F17D5/02', 'F16L55/16', 'E03B3/06', 'E03B3/08', 'E03B3/10', 'E03B3/11', 'E03B3/12', 
+                          'E03B3/14', 'E03B3/15', 'E03B3/16', 'E03B3/18', 'E03B3/20', 'E03B3/24', 'E03B3/26', 'E03B3/04', 
+                          'E03B3/28', 'E03B3/30', 'E03B3/32', 'E03B3/34', 'E03B3/36', 'E03B3/38', 'E03B3/02', 'E03B3/03', 
+                          'E03B3/00', 'E03B3/40']
+
+Green_CPC_class_special_1 = ['G01M3/08','G01M3/14','G01M3/18','G01M3/22','G01M3/28']
+Green_CPC_class_special_2 = ['E03']
+
+#%%combine_dataframe_to_excel                  
+gpatID=pd.concat([pd.DataFrame({'4digit':Green_CPC_class_4digit}),pd.DataFrame({'6digit':Green_CPC_class_6digit}),pd.DataFrame({'8digit':Green_CPC_class_8digit})],axis=1)
+gpatID.to_excel(r'C:\Users\dell\Desktop\CPC_greenpat_id.xlsx',index=False)
+
+
+#%%open all CPC code
+CPC_classes = pd.read_csv(r'C:\Users\dell\Desktop\21挑战杯\202001_CPC_Classes.txt', sep='|')
+CPC_classes['CPC_Class'].replace(' ','')
+
+CPC_classes['CPC_Class_3dig'] = CPC_classes['CPC_Class'].apply(lambda x:x[0:3]).tolist()
+CPC_classes['CPC_Class_4dig'] = CPC_classes['CPC_Class'].apply(lambda x:x[0:4]).tolist()
+CPC_classes['CPC_Class_6dig'] = CPC_classes['CPC_Class'].apply(lambda x:x[0:re.search('\/',x).start()]).tolist()
+#取出“/”前面的所有字符可以参考上面的这个语句 
+
+CPC_classes_green_1 = CPC_classes[(CPC_classes['CPC_Class_4dig'].isin(Green_CPC_class_4digit)) | (CPC_classes['CPC_Class_6dig'].isin(Green_CPC_class_6digit)) |(CPC_classes['CPC_Class'].isin(Green_CPC_class_8digit))  ]
+
+#对于包含and的处理是这样的，这些“特殊”的专利，如果把其所对应的所有专利号放在同一个单元格内，并用逗号空格分开，那么这个单元格的字符串必定同时包含前面要求的8位和E03
+#因此，先把CPC_classes分类号按照id进行groupby，并对同一个id的专利的CPC分类号合并到同一个单元格内
+#然后判断这个单元格是否同时包含，然后找出并集，形成CPC_classes_special
+
+def ab(DF):
+    return ', '.join(DF.values)
+CPC_classes['CPC_Class'].astype(str)
+CPC_classes_merge =  CPC_classes.groupby(['appln_id'])['CPC_Class'].apply(ab).reset_index()
+CPC_classes_merge.rename({'CPC_Class':'CPC_Class_agglo'},axis=1,inplace=True)
+
+CPC_classes_special = CPC_classes_merge[(CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/08|E03',case=False) |
+                                   (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/14|E03',case=False) |
+                                    (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/18|E03',case=False) |
+                                     (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/22|E03',case=False) |
+                                      (CPC_classes_merge['CPC_Class_agglo'].str.contains('G01M3/28|E03',case=False)]
+
+CPC_classes_special = CPC_classes_special['CPC_Class_agglo'].str.split(', ', expand=True).stack().reset_index(level=0).set_index('level_0').rename(columns={0:'CPC_Class'}).join(df.drop('CPC_Class', axis=1))
+
+#把CPC_classes_special和之前正常提取的CPC_classes_green_1合并，得到所有的greenCPC
+CPC_classes_green = pd.concat([CPC_classes_green_1,CPC_classes_special],axis=0)
+
+                                       
+
+count4=0
+for i in range(0, CPC_classes.iloc[;,0].size):
+    if CPC_classes.iloc[i,'CPC_Class_4dig'] in Green_CPC_class_4digit:
+        count4=count4+1;
+print(count4)
+
+
+count6=0
+for i in range(0, CPC_classes.iloc[;,0].size):
+    if CPC_classes.iloc[i,'CPC_Class_6dig'] in Green_CPC_class_6digit:
+        count6=count6+1;
+print(count6)
+
+count8=0
+for i in range(0, CPC_classes.iloc[;,0].size):
+    if CPC_classes.iloc[i,'CPC_Class'] in Green_CPC_class_8digit:
+        count8=count8+1;
+print(count8)
