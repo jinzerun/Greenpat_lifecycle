@@ -1,3 +1,1 @@
-Regional Knowlege Base
-Technological Lifecycle
-Green-tech Innovation
+Regional Knowlege Base, Technological Lifecycle and Green-tech Innovation
